@@ -647,29 +647,6 @@
             }
         }
 
-        // 清洗文本：去掉标点、emoji，只保留字母数字和空格
-        function cleanTextForTTS(text) {
-            let clean = text.replace(/<[^>]*>/g, ' ');
-            // 去掉emoji
-            clean = clean.replace(/[\u{1F000}-\u{1FFFF}|\u{2600}-\u{27FF}|\u{FE00}-\u{FEFF}|\u{1F300}-\u{1F9FF}|\u{2300}-\u{23FF}|\u{2B00}-\u{2BFF}]/gu, '');
-            // 去掉标点，保留字母、数字、空格、连字符、撇号
-            clean = clean.replace(/[^\w\s\-']/g, ' ');
-            clean = clean.replace(/\s+/g, ' ').trim();
-            return clean;
-        }
-
-        function speakAIText(text) {
-            speechSynthesis.cancel();
-            const clean = cleanTextForTTS(text);
-            if (!clean) return;
-            const utterance = new SpeechSynthesisUtterance(clean);
-            utterance.rate = 0.9;
-            utterance.pitch = 1.0;
-            const englishVoice = voices.find(v => v.lang.startsWith('en') || v.name.includes('English'));
-            if (englishVoice) utterance.voice = englishVoice;
-            speechSynthesis.speak(utterance);
-        }
-
         function addMessage(text, sender, translation = '') {
             const messagesDiv = document.getElementById('chatMessages');
             const messageDiv = document.createElement('div');
@@ -678,16 +655,6 @@
             messageDiv.innerHTML = text;
             if (translation && translation !== text) {
                 messageDiv.innerHTML += `<div class="translation">${translation}</div>`;
-            }
-            
-            // 为AI消息添加TTS朗读按钮
-            if (sender === 'ai') {
-                const ttsBtn = document.createElement('button');
-                ttsBtn.innerHTML = '🔊';
-                ttsBtn.title = 'Read aloud (English only)';
-                ttsBtn.style.cssText = 'background:rgba(255,255,255,0.2);border:none;border-radius:50%;width:28px;height:28px;cursor:pointer;margin-top:8px;font-size:14px;display:block;line-height:1;';
-                ttsBtn.onclick = () => speakAIText(text);
-                messageDiv.appendChild(ttsBtn);
             }
             
             messagesDiv.appendChild(messageDiv);
@@ -781,7 +748,6 @@
             
             isReadingAll = true;
             currentReadingIndex = 0;
-            speechSynthesis.cancel();
             
             function speakNext() {
                 if (!isReadingAll || currentReadingIndex >= alphabet.length) {
@@ -793,30 +759,10 @@
                 const cards = document.querySelectorAll('.letter-card');
                 const card = cards[currentReadingIndex];
                 
-                // 视觉反馈
-                document.querySelectorAll('.letter-card').forEach(c => {
-                    c.classList.remove('active');
-                    c.querySelector('.sound-indicator').classList.remove('active');
-                });
-                card.classList.add('active');
-                card.querySelector('.sound-indicator').classList.add('active');
+                speakLetter(letter, card);
+                currentReadingIndex++;
                 
-                const utterance = new SpeechSynthesisUtterance(letter);
-                utterance.rate = 0.8;
-                utterance.pitch = 1.2;
-                const englishVoice = voices.find(voice =>
-                    voice.lang.startsWith('en') || voice.name.includes('English')
-                );
-                if (englishVoice) utterance.voice = englishVoice;
-                
-                utterance.onend = () => {
-                    card.classList.remove('active');
-                    card.querySelector('.sound-indicator').classList.remove('active');
-                    currentReadingIndex++;
-                    setTimeout(speakNext, 300);
-                };
-                
-                speechSynthesis.speak(utterance);
+                setTimeout(speakNext, 1000);
             }
             
             speakNext();
@@ -987,8 +933,14 @@
             if (selectedOption === correctAnswer) {
                 buttonElement.style.background = '#28a745';
                 matchScore++;
-                // 播放正确答案的语音
-                speakLetter(correctAnswer.toLowerCase(), buttonElement);
+                // 直接朗读字母（不走 speakLetter，避免选项按钮无 .sound-indicator 导致报错）
+                const utterance = new SpeechSynthesisUtterance(correctAnswer.toLowerCase());
+                utterance.rate = 0.8;
+                utterance.pitch = 1.2;
+                const englishVoice = voices.find(v => v.lang.startsWith('en') || v.name.includes('English'));
+                if (englishVoice) utterance.voice = englishVoice;
+                speechSynthesis.cancel();
+                speechSynthesis.speak(utterance);
             } else {
                 buttonElement.style.background = '#dc3545';
                 // 高亮正确答案
@@ -1002,13 +954,9 @@
             matchTotal++;
             document.getElementById('matchScore').textContent = `得分: ${matchScore}/${matchTotal}`;
             
-            // 2秒后下一题
+            // 2秒后下一题（nextMatchQuestion 会重建按钮，无需再操作旧按钮）
             setTimeout(() => {
                 nextMatchQuestion();
-                buttons.forEach(btn => {
-                    btn.disabled = false;
-                    btn.style.background = '';
-                });
             }, 2000);
         }
 
