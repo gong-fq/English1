@@ -648,47 +648,93 @@
         }
 
         // 清洗文本：仅保留字母数字空格，去掉标点和emoji
-        function cleanTextForTTS(text) {
-            let clean = text.replace(/<[^>]*>/g, ' ');
-            clean = clean.replace(/[\u{1F000}-\u{1FFFF}\u{2600}-\u{27FF}\u{1F300}-\u{1F9FF}\u{2300}-\u{23FF}\u{2B00}-\u{2BFF}]/gu, '');
-            clean = clean.replace(/[^\w\s\-']/g, ' ');
-            return clean.replace(/\s+/g, ' ').trim();
+        // 去除HTML标签、emoji、标点符号，保留纯文字（中英文）
+        function stripForTTS(raw) {
+            let s = raw.replace(/<[^>]*>/g, ' ');
+            // 去emoji
+            s = s.replace(/[\u{1F000}-\u{1FFFF}\u{2600}-\u{27BF}\u{1F300}-\u{1F9FF}\u{2300}-\u{23FF}\u{2B00}-\u{2BFF}\u{FE00}-\u{FEFF}]/gu, '');
+            // 去标点（保留中文、英文字母数字、空格、连字符、撇号）
+            s = s.replace(/[^\u4e00-\u9fff\w\s\-']/g, ' ');
+            return s.replace(/\s+/g, ' ').trim();
         }
 
-        function speakAIText(text) {
+        // 朗读英文（超慢速，适合初学者跟读）
+        function speakEnglish(text) {
             speechSynthesis.cancel();
-            const clean = cleanTextForTTS(text);
+            const clean = stripForTTS(text);
             if (!clean) return;
-            const utterance = new SpeechSynthesisUtterance(clean);
-            utterance.rate = 0.9;
-            utterance.pitch = 1.0;
-            const englishVoice = voices.find(v => v.lang.startsWith('en') || v.name.includes('English'));
-            if (englishVoice) utterance.voice = englishVoice;
-            speechSynthesis.speak(utterance);
+            const utt = new SpeechSynthesisUtterance(clean);
+            utt.lang = 'en-US';
+            utt.rate = 0.55;
+            utt.pitch = 1.0;
+            const v = voices.find(x => x.lang === 'en-US') ||
+                      voices.find(x => x.lang.startsWith('en')) ||
+                      voices.find(x => x.name.includes('English'));
+            if (v) utt.voice = v;
+            speechSynthesis.speak(utt);
+        }
+
+        // 朗读中文
+        function speakChinese(text) {
+            speechSynthesis.cancel();
+            const clean = stripForTTS(text);
+            if (!clean) return;
+            const utt = new SpeechSynthesisUtterance(clean);
+            utt.lang = 'zh-CN';
+            utt.rate = 0.85;
+            utt.pitch = 1.0;
+            const v = voices.find(x => x.lang === 'zh-CN') ||
+                      voices.find(x => x.lang.startsWith('zh')) ||
+                      voices.find(x => /chinese|中文|普通话/i.test(x.name));
+            if (v) utt.voice = v;
+            speechSynthesis.speak(utt);
+        }
+
+        // 小喇叭按钮样式工厂
+        function makeTTSBtn(label, title, bgColor, onClick) {
+            const btn = document.createElement('button');
+            btn.innerHTML = label;
+            btn.title = title;
+            btn.style.cssText = `background:${bgColor};border:none;border-radius:12px;padding:3px 9px;cursor:pointer;font-size:12px;color:white;font-weight:bold;transition:transform 0.1s;white-space:nowrap;`;
+            btn.onmouseenter = () => btn.style.transform = 'scale(1.08)';
+            btn.onmouseleave = () => btn.style.transform = 'scale(1)';
+            btn.onclick = onClick;
+            return btn;
         }
 
         function addMessage(text, sender, translation = '') {
             const messagesDiv = document.getElementById('chatMessages');
             const messageDiv = document.createElement('div');
             messageDiv.className = `message ${sender}-message`;
-            
-            messageDiv.innerHTML = text;
-            if (translation && translation !== text) {
-                messageDiv.innerHTML += `<div class="translation">${translation}</div>`;
+
+            // 英文正文
+            const textDiv = document.createElement('div');
+            textDiv.innerHTML = text;
+            messageDiv.appendChild(textDiv);
+
+            // 英文朗读按钮（紧跟正文下方）
+            if (sender === 'ai') {
+                const enBtn = makeTTSBtn('🔊 English', 'Read English aloud (slow)',
+                    'rgba(255,255,255,0.25)', () => speakEnglish(text));
+                enBtn.style.marginTop = '6px';
+                messageDiv.appendChild(enBtn);
             }
 
-            // AI消息添加朗读按钮（只读英文正文，不读翻译）
-            if (sender === 'ai') {
-                const ttsBtn = document.createElement('button');
-                ttsBtn.innerHTML = '🔊';
-                ttsBtn.title = 'Read aloud (English only)';
-                ttsBtn.style.cssText = 'background:rgba(255,255,255,0.25);border:none;border-radius:50%;width:30px;height:30px;cursor:pointer;margin-top:8px;font-size:15px;display:block;line-height:1;transition:transform 0.1s;';
-                ttsBtn.onmouseenter = () => ttsBtn.style.transform = 'scale(1.2)';
-                ttsBtn.onmouseleave = () => ttsBtn.style.transform = 'scale(1)';
-                ttsBtn.onclick = () => speakAIText(text);
-                messageDiv.appendChild(ttsBtn);
+            // 中文翻译 + 中文朗读按钮
+            if (translation && translation !== text) {
+                const zhDiv = document.createElement('div');
+                zhDiv.className = 'translation';
+                zhDiv.innerHTML = translation;
+                messageDiv.appendChild(zhDiv);
+
+                if (sender === 'ai') {
+                    const zhBtn = makeTTSBtn('🔊 中文', '朗读中文翻译',
+                        'rgba(180,100,0,0.55)', () => speakChinese(translation));
+                    zhBtn.style.marginTop = '4px';
+                    messageDiv.appendChild(zhBtn);
+                }
             }
-            
+
             messagesDiv.appendChild(messageDiv);
             messagesDiv.scrollTop = messagesDiv.scrollHeight;
         }
@@ -751,7 +797,7 @@
             
             // 播放语音
             const utterance = new SpeechSynthesisUtterance(letter);
-            utterance.rate = 0.65;
+            utterance.rate = 0.6;
             utterance.pitch = 1.2;
             
             // 寻找英语语音
@@ -806,7 +852,7 @@
                 card.querySelector('.sound-indicator').classList.add('active');
                 
                 const utterance = new SpeechSynthesisUtterance(letter);
-                utterance.rate = 0.65;
+                utterance.rate = 0.6;
                 utterance.pitch = 1.2;
                 const englishVoice = voices.find(v => v.lang.startsWith('en') || v.name.includes('English'));
                 if (englishVoice) utterance.voice = englishVoice;
@@ -991,7 +1037,7 @@
                 matchScore++;
                 // 直接朗读字母（不走 speakLetter，避免选项按钮无 .sound-indicator 导致报错）
                 const utterance = new SpeechSynthesisUtterance(correctAnswer.toLowerCase());
-                utterance.rate = 0.65;
+                utterance.rate = 0.6;
                 utterance.pitch = 1.2;
                 const englishVoice = voices.find(v => v.lang.startsWith('en') || v.name.includes('English'));
                 if (englishVoice) utterance.voice = englishVoice;
