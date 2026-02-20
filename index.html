@@ -658,36 +658,63 @@
             return s.replace(/\s+/g, ' ').trim();
         }
 
-        // 朗读英文（超慢速，适合初学者跟读）
-        function speakEnglish(text) {
+        // 当前正在播放的按钮引用，用于切换停止状态
+        let activeTTSBtn = null;
+
+        function stopTTS() {
             speechSynthesis.cancel();
+            if (activeTTSBtn) {
+                activeTTSBtn._restoreLabel();
+                activeTTSBtn = null;
+            }
+        }
+
+        function startTTS(text, lang, rate, voicePicker, btn, originalLabel) {
+            // 如果点的是同一个按钮且正在播放 → 停止
+            if (activeTTSBtn === btn) {
+                stopTTS();
+                return;
+            }
+            // 停掉上一个（如果有）
+            stopTTS();
+
             const clean = stripForTTS(text);
             if (!clean) return;
+
             const utt = new SpeechSynthesisUtterance(clean);
-            utt.lang = 'en-US';
-            utt.rate = 0.55;
+            utt.lang = lang;
+            utt.rate = rate;
             utt.pitch = 1.0;
-            const v = voices.find(x => x.lang === 'en-US') ||
-                      voices.find(x => x.lang.startsWith('en')) ||
-                      voices.find(x => x.name.includes('English'));
+            const v = voicePicker(voices);
             if (v) utt.voice = v;
+
+            // 播放中：改图标为停止符
+            btn.innerHTML = btn.innerHTML.replace('🔊', '⏹');
+            btn._restoreLabel = () => { btn.innerHTML = originalLabel; };
+            activeTTSBtn = btn;
+
+            utt.onend = utt.onerror = () => {
+                if (activeTTSBtn === btn) {
+                    btn._restoreLabel();
+                    activeTTSBtn = null;
+                }
+            };
+
             speechSynthesis.speak(utt);
         }
 
+        // 朗读英文（超慢速，适合初学者跟读）
+        function speakEnglish(text, btn) {
+            startTTS(text, 'en-US', 0.55,
+                vs => vs.find(x => x.lang === 'en-US') || vs.find(x => x.lang.startsWith('en')) || vs.find(x => x.name.includes('English')),
+                btn, btn.innerHTML);
+        }
+
         // 朗读中文
-        function speakChinese(text) {
-            speechSynthesis.cancel();
-            const clean = stripForTTS(text);
-            if (!clean) return;
-            const utt = new SpeechSynthesisUtterance(clean);
-            utt.lang = 'zh-CN';
-            utt.rate = 0.85;
-            utt.pitch = 1.0;
-            const v = voices.find(x => x.lang === 'zh-CN') ||
-                      voices.find(x => x.lang.startsWith('zh')) ||
-                      voices.find(x => /chinese|中文|普通话/i.test(x.name));
-            if (v) utt.voice = v;
-            speechSynthesis.speak(utt);
+        function speakChinese(text, btn) {
+            startTTS(text, 'zh-CN', 0.85,
+                vs => vs.find(x => x.lang === 'zh-CN') || vs.find(x => x.lang.startsWith('zh')) || vs.find(x => /chinese|中文|普通话/i.test(x.name)),
+                btn, btn.innerHTML);
         }
 
         // 小喇叭按钮样式工厂
@@ -714,8 +741,8 @@
 
             // 英文朗读按钮（紧跟正文下方）
             if (sender === 'ai') {
-                const enBtn = makeTTSBtn('🔊 English', 'Read English aloud (slow)',
-                    'rgba(255,255,255,0.25)', () => speakEnglish(text));
+                const enBtn = makeTTSBtn('🔊 English', 'Read English aloud (slow) / click again to stop',
+                    'rgba(255,255,255,0.25)', () => speakEnglish(text, enBtn));
                 enBtn.style.marginTop = '6px';
                 messageDiv.appendChild(enBtn);
             }
@@ -728,8 +755,8 @@
                 messageDiv.appendChild(zhDiv);
 
                 if (sender === 'ai') {
-                    const zhBtn = makeTTSBtn('🔊 中文', '朗读中文翻译',
-                        'rgba(180,100,0,0.55)', () => speakChinese(translation));
+                    const zhBtn = makeTTSBtn('🔊 中文', '朗读中文翻译 / 再次点击停止',
+                        'rgba(180,100,0,0.55)', () => speakChinese(translation, zhBtn));
                     zhBtn.style.marginTop = '4px';
                     messageDiv.appendChild(zhBtn);
                 }
