@@ -751,7 +751,7 @@
             
             // 播放语音
             const utterance = new SpeechSynthesisUtterance(letter);
-            utterance.rate = 0.8;
+            utterance.rate = 0.65;
             utterance.pitch = 1.2;
             
             // 寻找英语语音
@@ -806,7 +806,7 @@
                 card.querySelector('.sound-indicator').classList.add('active');
                 
                 const utterance = new SpeechSynthesisUtterance(letter);
-                utterance.rate = 0.8;
+                utterance.rate = 0.65;
                 utterance.pitch = 1.2;
                 const englishVoice = voices.find(v => v.lang.startsWith('en') || v.name.includes('English'));
                 if (englishVoice) utterance.voice = englishVoice;
@@ -991,7 +991,7 @@
                 matchScore++;
                 // 直接朗读字母（不走 speakLetter，避免选项按钮无 .sound-indicator 导致报错）
                 const utterance = new SpeechSynthesisUtterance(correctAnswer.toLowerCase());
-                utterance.rate = 0.8;
+                utterance.rate = 0.65;
                 utterance.pitch = 1.2;
                 const englishVoice = voices.find(v => v.lang.startsWith('en') || v.name.includes('English'));
                 if (englishVoice) utterance.voice = englishVoice;
